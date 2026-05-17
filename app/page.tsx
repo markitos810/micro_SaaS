@@ -11,6 +11,9 @@ import {
   Phone,
   Clock,
   X,
+  Send,
+  User,
+  Bot,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -24,6 +27,14 @@ type Lead = {
   notes: string | null;
 };
 
+type ConversationMessage = {
+  id: string;
+  lead_id: string;
+  role: string;
+  message: string;
+  created_at: string;
+};
+
 export default function ClinicFlowDemo() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
@@ -34,7 +45,7 @@ export default function ClinicFlowDemo() {
     },
     {
       sender: "ai",
-      text: "¡Hola! Claro. Trabajamos con ácido hialurónico premium. ¿Te gustaría reservar valoración gratuita?",
+      text: "¡Hola! 💖 Claro. Trabajamos con ácido hialurónico premium. ¿Te gustaría reservar valoración gratuita?",
     },
   ]);
 
@@ -44,6 +55,14 @@ export default function ClinicFlowDemo() {
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [errorLeads, setErrorLeads] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
+
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [conversationMessages, setConversationMessages] = useState<
+    ConversationMessage[]
+  >([]);
+  const [loadingConversation, setLoadingConversation] = useState(false);
+  const [newConversationMessage, setNewConversationMessage] = useState("");
+  const [newConversationRole, setNewConversationRole] = useState("clinica");
 
   const [newLead, setNewLead] = useState({
     name: "",
@@ -107,6 +126,53 @@ export default function ClinicFlowDemo() {
     }
 
     setLoadingLeads(false);
+  }
+
+  async function openConversation(lead: Lead) {
+    setSelectedLead(lead);
+    setLoadingConversation(true);
+    setConversationMessages([]);
+
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo cargar la conversación.");
+    } else {
+      setConversationMessages(data || []);
+    }
+
+    setLoadingConversation(false);
+  }
+
+  async function addConversationMessage() {
+    if (!selectedLead) return;
+
+    if (!newConversationMessage.trim()) {
+      alert("Escribe un mensaje.");
+      return;
+    }
+
+    const { error } = await supabase.from("conversations").insert([
+      {
+        lead_id: selectedLead.id,
+        role: newConversationRole,
+        message: newConversationMessage,
+      },
+    ]);
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo guardar el mensaje. Revisa permisos/RLS.");
+      return;
+    }
+
+    setNewConversationMessage("");
+    await openConversation(selectedLead);
   }
 
   const sendMessage = () => {
@@ -217,7 +283,7 @@ export default function ClinicFlowDemo() {
             </div>
           </div>
 
-          {/* CHAT */}
+          {/* CHAT DEMO */}
           <div className="bg-neutral-900 rounded-3xl border border-white/10 p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-6">
               <MessageCircle className="text-green-400" />
@@ -381,7 +447,10 @@ export default function ClinicFlowDemo() {
                   </div>
                 </div>
 
-                <button className="mt-8 w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition">
+                <button
+                  onClick={() => openConversation(lead)}
+                  className="mt-8 w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition"
+                >
                   Ver conversación
                 </button>
               </div>
@@ -484,6 +553,177 @@ export default function ClinicFlowDemo() {
               >
                 Guardar Lead
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONVERSACIÓN */}
+      {selectedLead && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+          <div className="bg-neutral-900 border border-white/10 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-white/10 flex items-start justify-between">
+              <div>
+                <h2 className="text-3xl font-bold">
+                  {selectedLead.name || "Paciente sin nombre"}
+                </h2>
+
+                <p className="text-white/50 mt-1">
+                  {selectedLead.treatment_interest || "Sin tratamiento"} ·{" "}
+                  {selectedLead.phone}
+                </p>
+
+                <div className="flex gap-3 mt-4">
+                  <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-sm">
+                    {selectedLead.status || "nuevo"}
+                  </span>
+
+                  <span className="bg-white/10 text-white/70 px-3 py-1 rounded-full text-sm">
+                    Interés: {selectedLead.interest_level || "medio"}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setSelectedLead(null);
+                  setConversationMessages([]);
+                  setNewConversationMessage("");
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <X size={26} />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-[1.4fr_0.8fr]">
+              <div className="p-6 border-r border-white/10">
+                <h3 className="text-xl font-semibold mb-4">
+                  Conversación
+                </h3>
+
+                <div className="bg-black rounded-2xl border border-white/10 p-4 h-[360px] overflow-y-auto space-y-4">
+                  {loadingConversation && (
+                    <p className="text-white/50">
+                      Cargando conversación...
+                    </p>
+                  )}
+
+                  {!loadingConversation &&
+                    conversationMessages.length === 0 && (
+                      <p className="text-white/50">
+                        Todavía no hay mensajes guardados para este paciente.
+                      </p>
+                    )}
+
+                  {conversationMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`max-w-[85%] p-4 rounded-2xl ${
+                        msg.role === "paciente"
+                          ? "bg-white text-black ml-auto"
+                          : msg.role === "ia"
+                          ? "bg-green-500/20 text-green-100"
+                          : "bg-blue-500/20 text-blue-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 text-xs opacity-70">
+                        {msg.role === "paciente" ? (
+                          <User size={14} />
+                        ) : msg.role === "ia" ? (
+                          <Bot size={14} />
+                        ) : (
+                          <MessageCircle size={14} />
+                        )}
+
+                        <span>
+                          {msg.role === "paciente"
+                            ? "Paciente"
+                            : msg.role === "ia"
+                            ? "IA"
+                            : "Clínica"}
+                        </span>
+                      </div>
+
+                      <p>{msg.message}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-[140px_1fr_auto] gap-2">
+                  <select
+                    className="bg-black border border-white/10 rounded-xl px-3 py-3 outline-none"
+                    value={newConversationRole}
+                    onChange={(e) =>
+                      setNewConversationRole(e.target.value)
+                    }
+                  >
+                    <option value="clinica">Clínica</option>
+                    <option value="paciente">Paciente</option>
+                    <option value="ia">IA</option>
+                  </select>
+
+                  <input
+                    className="bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    placeholder="Añadir mensaje..."
+                    value={newConversationMessage}
+                    onChange={(e) =>
+                      setNewConversationMessage(e.target.value)
+                    }
+                  />
+
+                  <button
+                    onClick={addConversationMessage}
+                    className="bg-green-500 text-black px-5 rounded-xl font-semibold hover:bg-green-400 transition"
+                  >
+                    <Send size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-4">
+                  Ficha del paciente
+                </h3>
+
+                <div className="space-y-4 text-white/70">
+                  <div>
+                    <p className="text-white/40 text-sm">Teléfono</p>
+                    <p>{selectedLead.phone}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-white/40 text-sm">Tratamiento</p>
+                    <p>
+                      {selectedLead.treatment_interest ||
+                        "No indicado"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-white/40 text-sm">Estado</p>
+                    <p>{selectedLead.status || "nuevo"}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-white/40 text-sm">Nivel de interés</p>
+                    <p>{selectedLead.interest_level || "medio"}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-white/40 text-sm">Notas</p>
+                    <p>{selectedLead.notes || "Sin notas"}</p>
+                  </div>
+                </div>
+
+                <button className="mt-8 w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition">
+                  Programar seguimiento
+                </button>
+
+                <button className="mt-3 w-full border border-white/10 py-3 rounded-xl font-semibold hover:bg-white/10 transition">
+                  Crear cita
+                </button>
+              </div>
             </div>
           </div>
         </div>
