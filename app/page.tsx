@@ -84,6 +84,29 @@ export default function ClinicFlowDemo() {
     notes: "",
   });
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+  const [interestFilter, setInterestFilter] = useState("todos");
+
+  const filteredLeads = leads.filter((lead) => {
+    const searchableText = `
+      ${lead.name || ""}
+      ${lead.phone || ""}
+      ${lead.treatment_interest || ""}
+    `.toLowerCase();
+
+    const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "todos" || (lead.status || "nuevo") === statusFilter;
+
+    const matchesInterest =
+      interestFilter === "todos" ||
+      (lead.interest_level || "medio") === interestFilter;
+
+    return matchesSearch && matchesStatus && matchesInterest;
+  });
+
   useEffect(() => {
     async function init() {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -449,6 +472,38 @@ export default function ClinicFlowDemo() {
             </button>
           </div>
 
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
+            <input
+              className="bg-neutral-900 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              placeholder="Buscar por nombre, teléfono o tratamiento..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+
+            <select
+              className="bg-neutral-900 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="todos">Todos los estados</option>
+              <option value="nuevo">Nuevo</option>
+              <option value="seguimiento">Seguimiento</option>
+              <option value="citado">Citado</option>
+              <option value="perdido">Perdido</option>
+            </select>
+
+            <select
+              className="bg-neutral-900 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              value={interestFilter}
+              onChange={(e) => setInterestFilter(e.target.value)}
+            >
+              <option value="todos">Todos los intereses</option>
+              <option value="bajo">Interés bajo</option>
+              <option value="medio">Interés medio</option>
+              <option value="alto">Interés alto</option>
+            </select>
+          </div>
+
           {loadingLeads && (
             <p className="text-white/60">Cargando leads desde Supabase...</p>
           )}
@@ -463,8 +518,17 @@ export default function ClinicFlowDemo() {
             <p className="text-white/60">No hay leads todavía en Supabase.</p>
           )}
 
+          {!loadingLeads &&
+            !errorLeads &&
+            leads.length > 0 &&
+            filteredLeads.length === 0 && (
+              <p className="text-white/60">
+                No hay pacientes que coincidan con los filtros.
+              </p>
+            )}
+
           <div className="grid md:grid-cols-3 gap-6">
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <div
                 key={lead.id}
                 className="bg-neutral-900 border border-white/10 rounded-3xl p-6"
@@ -613,18 +677,18 @@ export default function ClinicFlowDemo() {
 
       {selectedLead && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-6 z-50 overflow-y-auto">
-  <button
-    onClick={() => {
-      setSelectedLead(null);
-      setConversationMessages([]);
-      setNewConversationMessage("");
-    }}
-    className="fixed top-6 right-6 bg-white text-black px-4 py-2 rounded-xl font-semibold z-[60] hover:bg-neutral-200 transition"
-  >
-    Cerrar
-  </button>
+          <button
+            onClick={() => {
+              setSelectedLead(null);
+              setConversationMessages([]);
+              setNewConversationMessage("");
+            }}
+            className="fixed top-6 right-6 bg-white text-black px-4 py-2 rounded-xl font-semibold z-[60] hover:bg-neutral-200 transition"
+          >
+            Cerrar
+          </button>
 
-  <div className="bg-neutral-900 border border-white/10 rounded-3xl max-w-5xl w-full shadow-2xl overflow-hidden mt-10 mb-10">
+          <div className="bg-neutral-900 border border-white/10 rounded-3xl max-w-5xl w-full shadow-2xl overflow-hidden mt-10 mb-10">
             <div className="p-6 border-b border-white/10 flex items-start justify-between">
               <div>
                 <h2 className="text-3xl font-bold">
