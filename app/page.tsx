@@ -15,6 +15,8 @@ import {
   User,
   Bot,
   Save,
+  Bell,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -36,6 +38,20 @@ type ConversationMessage = {
   created_at: string;
 };
 
+type FollowUp = {
+  id: string;
+  lead_id: string;
+  message: string;
+  scheduled_at: string;
+  status: string | null;
+  created_at: string;
+  leads?: {
+    name: string | null;
+    phone: string | null;
+    treatment_interest: string | null;
+  } | null;
+};
+
 export default function ClinicFlowDemo() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
@@ -52,8 +68,10 @@ export default function ClinicFlowDemo() {
 
   const [input, setInput] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [loadingFollowUps, setLoadingFollowUps] = useState(true);
   const [errorLeads, setErrorLeads] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
 
@@ -65,6 +83,13 @@ export default function ClinicFlowDemo() {
   const [newConversationMessage, setNewConversationMessage] = useState("");
   const [newConversationRole, setNewConversationRole] = useState("clinica");
   const [savingLead, setSavingLead] = useState(false);
+
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [newFollowUp, setNewFollowUp] = useState({
+    message: "",
+    scheduled_at: "",
+  });
 
   const [editableLead, setEditableLead] = useState({
     name: "",
@@ -119,10 +144,32 @@ export default function ClinicFlowDemo() {
       setCheckingAuth(false);
       await loadClinic();
       await loadLeads();
+      await loadFollowUps();
     }
 
     init();
   }, []);
+
+  function getTomorrowDateTimeInput() {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    date.setHours(10, 0, 0, 0);
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  function formatDate(dateString: string) {
+    return new Intl.DateTimeFormat("es-ES", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(dateString));
+  }
 
   async function loadClinic() {
     const { data, error } = await supabase
@@ -160,6 +207,27 @@ export default function ClinicFlowDemo() {
     }
 
     setLoadingLeads(false);
+  }
+
+  async function loadFollowUps() {
+    setLoadingFollowUps(true);
+
+    const { data, error } = await supabase
+      .from("follow_ups")
+      .select(
+        "id, lead_id, message, scheduled_at, status, created_at, leads(name, phone, treatment_interest)"
+      )
+      .eq("status", "pendiente")
+      .order("scheduled_at", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      setFollowUps([]);
+    } else {
+      setFollowUps((data || []) as unknown as FollowUp[]);
+    }
+
+    setLoadingFollowUps(false);
   }
 
   async function openConversation(lead: Lead) {
@@ -262,6 +330,71 @@ export default function ClinicFlowDemo() {
     setSelectedLead(updatedLead);
     await loadLeads();
     alert("Lead actualizado correctamente.");
+  }
+
+  function openFollowUpForm() {
+    if (!selectedLead) return;
+
+    setNewFollowUp({
+      message: `Hola ${selectedLead.name || ""}, queríamos saber si sigues interesada/o en ${
+        selectedLead.treatment_interest || "el tratamiento"
+      }. ¿Quieres que te ayudemos a reservar una valoración?`,
+      scheduled_at: getTomorrowDateTimeInput(),
+    });
+
+    setShowFollowUpForm(true);
+  }
+
+  async function createFollowUp() {
+    if (!selectedLead) return;
+
+    if (!newFollowUp.message.trim() || !newFollowUp.scheduled_at) {
+      alert("Escribe el mensaje y selecciona fecha/hora.");
+      return;
+    }
+
+    setSavingFollowUp(true);
+
+    const { error } = await supabase.from("follow_ups").insert([
+      {
+        lead_id: selectedLead.id,
+        message: newFollowUp.message,
+        scheduled_at: new Date(newFollowUp.scheduled_at).toISOString(),
+        status: "pendiente",
+      },
+    ]);
+
+    setSavingFollowUp(false);
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo programar el seguimiento. Revisa permisos/RLS.");
+      return;
+    }
+
+    setShowFollowUpForm(false);
+    setNewFollowUp({
+      message: "",
+      scheduled_at: "",
+    });
+
+    await loadFollowUps();
+    alert("Seguimiento programado correctamente.");
+  }
+
+  async function completeFollowUp(followUpId: string) {
+    const { error } = await supabase
+      .from("follow_ups")
+      .update({ status: "completado" })
+      .eq("id", followUpId);
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo completar el seguimiento.");
+      return;
+    }
+
+    await loadFollowUps();
   }
 
   const sendMessage = () => {
@@ -446,6 +579,71 @@ export default function ClinicFlowDemo() {
             <p className="text-5xl font-bold">+4.2k€</p>
 
             <p className="text-white/60 mt-2">Incremento mensual estimado</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-8 py-12 border-b border-white/10">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <Bell className="text-yellow-400" />
+            <div>
+              <h2 className="text-3xl font-bold">Seguimientos pendientes</h2>
+              <p className="text-white/60">
+                Pacientes a los que hay que volver a contactar.
+              </p>
+            </div>
+          </div>
+
+          {loadingFollowUps && (
+            <p className="text-white/60">Cargando seguimientos...</p>
+          )}
+
+          {!loadingFollowUps && followUps.length === 0 && (
+            <p className="text-white/60">
+              No hay seguimientos pendientes todavía.
+            </p>
+          )}
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {followUps.map((followUp) => (
+              <div
+                key={followUp.id}
+                className="bg-neutral-900 border border-white/10 rounded-3xl p-6"
+              >
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-xl font-semibold">
+                      {followUp.leads?.name || "Paciente"}
+                    </h3>
+                    <p className="text-white/50 text-sm">
+                      {followUp.leads?.treatment_interest ||
+                        "Tratamiento no indicado"}
+                    </p>
+                  </div>
+
+                  <span className="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-sm">
+                    Pendiente
+                  </span>
+                </div>
+
+                <p className="text-white/70 text-sm leading-6 mb-4">
+                  {followUp.message}
+                </p>
+
+                <div className="text-white/50 text-sm mb-5">
+                  Programado: {formatDate(followUp.scheduled_at)}
+                </div>
+
+                <button
+                  onClick={() => completeFollowUp(followUp.id)}
+                  className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 size={18} />
+                  Marcar como completado
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -896,7 +1094,10 @@ export default function ClinicFlowDemo() {
                     {savingLead ? "Guardando..." : "Guardar cambios"}
                   </button>
 
-                  <button className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition">
+                  <button
+                    onClick={openFollowUpForm}
+                    className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition"
+                  >
                     Programar seguimiento
                   </button>
 
@@ -905,6 +1106,62 @@ export default function ClinicFlowDemo() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFollowUpForm && selectedLead && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-[80]">
+          <div className="bg-neutral-900 border border-white/10 rounded-3xl p-8 max-w-xl w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-3xl font-bold">Programar seguimiento</h2>
+                <p className="text-white/50 mt-1">
+                  Paciente: {selectedLead.name || "Paciente sin nombre"}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowFollowUpForm(false)}
+                className="text-white/60 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <textarea
+                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none min-h-[140px]"
+                placeholder="Mensaje de seguimiento"
+                value={newFollowUp.message}
+                onChange={(e) =>
+                  setNewFollowUp({
+                    ...newFollowUp,
+                    message: e.target.value,
+                  })
+                }
+              />
+
+              <input
+                type="datetime-local"
+                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                value={newFollowUp.scheduled_at}
+                onChange={(e) =>
+                  setNewFollowUp({
+                    ...newFollowUp,
+                    scheduled_at: e.target.value,
+                  })
+                }
+              />
+
+              <button
+                onClick={createFollowUp}
+                disabled={savingFollowUp}
+                className="w-full bg-green-500 text-black font-semibold py-3 rounded-xl hover:bg-green-400 transition disabled:opacity-50"
+              >
+                {savingFollowUp ? "Guardando..." : "Guardar seguimiento"}
+              </button>
             </div>
           </div>
         </div>
