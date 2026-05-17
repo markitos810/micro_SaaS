@@ -14,6 +14,7 @@ import {
   Send,
   User,
   Bot,
+  Save,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -63,6 +64,16 @@ export default function ClinicFlowDemo() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [newConversationMessage, setNewConversationMessage] = useState("");
   const [newConversationRole, setNewConversationRole] = useState("clinica");
+  const [savingLead, setSavingLead] = useState(false);
+
+  const [editableLead, setEditableLead] = useState({
+    name: "",
+    phone: "",
+    treatment_interest: "",
+    status: "nuevo",
+    interest_level: "medio",
+    notes: "",
+  });
 
   const [newLead, setNewLead] = useState({
     name: "",
@@ -130,6 +141,16 @@ export default function ClinicFlowDemo() {
 
   async function openConversation(lead: Lead) {
     setSelectedLead(lead);
+
+    setEditableLead({
+      name: lead.name || "",
+      phone: lead.phone || "",
+      treatment_interest: lead.treatment_interest || "",
+      status: lead.status || "nuevo",
+      interest_level: lead.interest_level || "medio",
+      notes: lead.notes || "",
+    });
+
     setLoadingConversation(true);
     setConversationMessages([]);
 
@@ -173,6 +194,51 @@ export default function ClinicFlowDemo() {
 
     setNewConversationMessage("");
     await openConversation(selectedLead);
+  }
+
+  async function updateLead() {
+    if (!selectedLead) return;
+
+    if (!editableLead.name.trim() || !editableLead.phone.trim()) {
+      alert("El nombre y el teléfono son obligatorios.");
+      return;
+    }
+
+    setSavingLead(true);
+
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        name: editableLead.name,
+        phone: editableLead.phone,
+        treatment_interest: editableLead.treatment_interest,
+        status: editableLead.status,
+        interest_level: editableLead.interest_level,
+        notes: editableLead.notes,
+      })
+      .eq("id", selectedLead.id);
+
+    setSavingLead(false);
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo actualizar el lead. Revisa permisos/RLS.");
+      return;
+    }
+
+    const updatedLead: Lead = {
+      ...selectedLead,
+      name: editableLead.name,
+      phone: editableLead.phone,
+      treatment_interest: editableLead.treatment_interest,
+      status: editableLead.status,
+      interest_level: editableLead.interest_level,
+      notes: editableLead.notes,
+    };
+
+    setSelectedLead(updatedLead);
+    await loadLeads();
+    alert("Lead actualizado correctamente.");
   }
 
   const sendMessage = () => {
@@ -254,7 +320,6 @@ export default function ClinicFlowDemo() {
         Cerrar sesión
       </button>
 
-      {/* HERO */}
       <section className="px-8 py-16 border-b border-white/10">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div>
@@ -283,13 +348,10 @@ export default function ClinicFlowDemo() {
             </div>
           </div>
 
-          {/* CHAT DEMO */}
           <div className="bg-neutral-900 rounded-3xl border border-white/10 p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-6">
               <MessageCircle className="text-green-400" />
-              <h2 className="font-semibold text-xl">
-                Asistente WhatsApp IA
-              </h2>
+              <h2 className="font-semibold text-xl">Asistente WhatsApp IA</h2>
             </div>
 
             <div className="space-y-4 h-[350px] overflow-y-auto mb-4">
@@ -326,7 +388,6 @@ export default function ClinicFlowDemo() {
         </div>
       </section>
 
-      {/* STATS */}
       <section className="px-8 py-14 border-b border-white/10">
         <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
           <div className="bg-neutral-900 p-6 rounded-3xl border border-white/10">
@@ -337,9 +398,7 @@ export default function ClinicFlowDemo() {
 
             <p className="text-5xl font-bold">+37%</p>
 
-            <p className="text-white/60 mt-2">
-              Más reservas desde WhatsApp
-            </p>
+            <p className="text-white/60 mt-2">Más reservas desde WhatsApp</p>
           </div>
 
           <div className="bg-neutral-900 p-6 rounded-3xl border border-white/10">
@@ -363,14 +422,11 @@ export default function ClinicFlowDemo() {
 
             <p className="text-5xl font-bold">+4.2k€</p>
 
-            <p className="text-white/60 mt-2">
-              Incremento mensual estimado
-            </p>
+            <p className="text-white/60 mt-2">Incremento mensual estimado</p>
           </div>
         </div>
       </section>
 
-      {/* LEADS */}
       <section className="px-8 py-16">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-10">
@@ -404,9 +460,7 @@ export default function ClinicFlowDemo() {
           )}
 
           {!loadingLeads && !errorLeads && leads.length === 0 && (
-            <p className="text-white/60">
-              No hay leads todavía en Supabase.
-            </p>
+            <p className="text-white/60">No hay leads todavía en Supabase.</p>
           )}
 
           <div className="grid md:grid-cols-3 gap-6">
@@ -459,7 +513,6 @@ export default function ClinicFlowDemo() {
         </div>
       </section>
 
-      {/* MODAL NUEVO LEAD */}
       {showLeadForm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 z-50">
           <div className="bg-neutral-900 border border-white/10 rounded-3xl p-8 max-w-xl w-full shadow-2xl">
@@ -558,10 +611,20 @@ export default function ClinicFlowDemo() {
         </div>
       )}
 
-      {/* MODAL CONVERSACIÓN */}
       {selectedLead && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="bg-neutral-900 border border-white/10 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center p-6 z-50 overflow-y-auto">
+  <button
+    onClick={() => {
+      setSelectedLead(null);
+      setConversationMessages([]);
+      setNewConversationMessage("");
+    }}
+    className="fixed top-6 right-6 bg-white text-black px-4 py-2 rounded-xl font-semibold z-[60] hover:bg-neutral-200 transition"
+  >
+    Cerrar
+  </button>
+
+  <div className="bg-neutral-900 border border-white/10 rounded-3xl max-w-5xl w-full shadow-2xl overflow-hidden mt-10 mb-10">
             <div className="p-6 border-b border-white/10 flex items-start justify-between">
               <div>
                 <h2 className="text-3xl font-bold">
@@ -596,17 +659,13 @@ export default function ClinicFlowDemo() {
               </button>
             </div>
 
-            <div className="grid md:grid-cols-[1.4fr_0.8fr]">
+            <div className="grid md:grid-cols-[1.3fr_0.9fr]">
               <div className="p-6 border-r border-white/10">
-                <h3 className="text-xl font-semibold mb-4">
-                  Conversación
-                </h3>
+                <h3 className="text-xl font-semibold mb-4">Conversación</h3>
 
                 <div className="bg-black rounded-2xl border border-white/10 p-4 h-[360px] overflow-y-auto space-y-4">
                   {loadingConversation && (
-                    <p className="text-white/50">
-                      Cargando conversación...
-                    </p>
+                    <p className="text-white/50">Cargando conversación...</p>
                   )}
 
                   {!loadingConversation &&
@@ -654,9 +713,7 @@ export default function ClinicFlowDemo() {
                   <select
                     className="bg-black border border-white/10 rounded-xl px-3 py-3 outline-none"
                     value={newConversationRole}
-                    onChange={(e) =>
-                      setNewConversationRole(e.target.value)
-                    }
+                    onChange={(e) => setNewConversationRole(e.target.value)}
                   >
                     <option value="clinica">Clínica</option>
                     <option value="paciente">Paciente</option>
@@ -683,46 +740,106 @@ export default function ClinicFlowDemo() {
 
               <div className="p-6">
                 <h3 className="text-xl font-semibold mb-4">
-                  Ficha del paciente
+                  Editar ficha del paciente
                 </h3>
 
-                <div className="space-y-4 text-white/70">
-                  <div>
-                    <p className="text-white/40 text-sm">Teléfono</p>
-                    <p>{selectedLead.phone}</p>
-                  </div>
+                <div className="space-y-4">
+                  <input
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    placeholder="Nombre"
+                    value={editableLead.name}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        name: e.target.value,
+                      })
+                    }
+                  />
 
-                  <div>
-                    <p className="text-white/40 text-sm">Tratamiento</p>
-                    <p>
-                      {selectedLead.treatment_interest ||
-                        "No indicado"}
-                    </p>
-                  </div>
+                  <input
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    placeholder="Teléfono"
+                    value={editableLead.phone}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        phone: e.target.value,
+                      })
+                    }
+                  />
 
-                  <div>
-                    <p className="text-white/40 text-sm">Estado</p>
-                    <p>{selectedLead.status || "nuevo"}</p>
-                  </div>
+                  <input
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    placeholder="Tratamiento de interés"
+                    value={editableLead.treatment_interest}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        treatment_interest: e.target.value,
+                      })
+                    }
+                  />
 
-                  <div>
-                    <p className="text-white/40 text-sm">Nivel de interés</p>
-                    <p>{selectedLead.interest_level || "medio"}</p>
-                  </div>
+                  <select
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    value={editableLead.status}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        status: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="nuevo">Nuevo</option>
+                    <option value="seguimiento">Seguimiento</option>
+                    <option value="citado">Citado</option>
+                    <option value="perdido">Perdido</option>
+                  </select>
 
-                  <div>
-                    <p className="text-white/40 text-sm">Notas</p>
-                    <p>{selectedLead.notes || "Sin notas"}</p>
-                  </div>
+                  <select
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none"
+                    value={editableLead.interest_level}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        interest_level: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="bajo">Interés bajo</option>
+                    <option value="medio">Interés medio</option>
+                    <option value="alto">Interés alto</option>
+                  </select>
+
+                  <textarea
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 outline-none min-h-[120px]"
+                    placeholder="Notas"
+                    value={editableLead.notes}
+                    onChange={(e) =>
+                      setEditableLead({
+                        ...editableLead,
+                        notes: e.target.value,
+                      })
+                    }
+                  />
+
+                  <button
+                    onClick={updateLead}
+                    disabled={savingLead}
+                    className="w-full bg-green-500 text-black py-3 rounded-xl font-semibold hover:bg-green-400 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} />
+                    {savingLead ? "Guardando..." : "Guardar cambios"}
+                  </button>
+
+                  <button className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition">
+                    Programar seguimiento
+                  </button>
+
+                  <button className="w-full border border-white/10 py-3 rounded-xl font-semibold hover:bg-white/10 transition">
+                    Crear cita
+                  </button>
                 </div>
-
-                <button className="mt-8 w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-neutral-200 transition">
-                  Programar seguimiento
-                </button>
-
-                <button className="mt-3 w-full border border-white/10 py-3 rounded-xl font-semibold hover:bg-white/10 transition">
-                  Crear cita
-                </button>
               </div>
             </div>
           </div>
